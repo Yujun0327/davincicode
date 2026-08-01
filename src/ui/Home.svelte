@@ -1,9 +1,8 @@
 <script lang="ts">
   import RulesLeaflet from './RulesLeaflet.svelte'
-  import { wobblyLine } from './wobble'
 
   interface Props {
-    onHotseat: (playerCount: 2 | 3 | 4, names: string[]) => void
+    onHotseat: (playerCount: 2 | 3 | 4, names: string[], jokers: boolean) => void
     onCreateRoom?: () => void
     onJoinRoom?: (code: string) => void
   }
@@ -12,26 +11,17 @@
 
   let playerCount = $state<2 | 3 | 4>(2)
   let names = $state(['', '', '', ''])
+  let jokers = $state(true)
   let joinCode = $state('')
   let rulesOpen = $state(false)
 
   const online = $derived(onCreateRoom !== undefined && onJoinRoom !== undefined)
-
-  const ruleTop = wobblyLine(4, 6, 336, 6, 1.6, 4)
-  const ruleBottom = wobblyLine(4, 6, 336, 6, 1.6, 3)
 </script>
 
 <main class="home">
   <header class="marquee">
-    <svg class="rule" viewBox="0 0 340 12" aria-hidden="true">
-      <path d={ruleTop} class="rule-ink" />
-      <path d="M170 1.5 L175 6 L170 10.5 L165 6 Z" class="rule-gem" />
-    </svg>
+    <span class="classification label">classified — eyes only</span>
     <h1>Davinci Code</h1>
-    <svg class="rule" viewBox="0 0 340 12" aria-hidden="true">
-      <path d={ruleBottom} class="rule-ink" />
-      <path d="M170 1.5 L175 6 L170 10.5 L165 6 Z" class="rule-gem" />
-    </svg>
     <p class="flavor">Crack their cipher before they crack yours.</p>
     <button class="btn btn--quiet" onclick={() => (rulesOpen = true)}>How to play</button>
   </header>
@@ -62,7 +52,15 @@
         {/each}
       </div>
 
-      <button class="btn btn--gold start" onclick={() => onHotseat(playerCount, names.slice(0, playerCount))}>
+      <label class="jokers">
+        <input type="checkbox" bind:checked={jokers} />
+        <span class="label">play with the dash jokers</span>
+      </label>
+
+      <button
+        class="btn btn--gold start"
+        onclick={() => onHotseat(playerCount, names.slice(0, playerCount), jokers)}
+      >
         Begin
       </button>
     </section>
@@ -125,28 +123,20 @@
   }
 
   .marquee h1 {
-    font-size: clamp(3rem, 10vw, 4.8rem);
-    letter-spacing: 0.02em;
+    font-size: clamp(2.4rem, 9vw, 4.2rem);
+    letter-spacing: 0.04em;
     line-height: 1;
+    border-top: 2px solid var(--ink);
+    border-bottom: 2px solid var(--ink);
+    padding: var(--sp-2) var(--sp-3);
   }
 
-  .rule {
-    width: min(70vw, 340px);
-    height: 12px;
-  }
-
-  .rule-ink {
-    fill: none;
-    stroke: var(--ink-soft);
-    stroke-width: 1.5;
-    stroke-linecap: round;
-  }
-
-  .rule-gem {
-    fill: var(--gold-leaf);
-    stroke: var(--ink);
-    stroke-width: 1;
-    stroke-linejoin: round;
+  .classification {
+    color: var(--stamp);
+    border: 1px solid var(--stamp);
+    border-radius: var(--radius);
+    padding: 2px 10px;
+    transform: rotate(-3deg);
   }
 
   .flavor {
@@ -195,6 +185,19 @@
   .names {
     display: grid;
     gap: var(--sp-2);
+  }
+
+  .jokers {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    cursor: pointer;
+  }
+
+  .jokers input {
+    accent-color: var(--stamp);
+    width: 16px;
+    height: 16px;
   }
 
   .join {

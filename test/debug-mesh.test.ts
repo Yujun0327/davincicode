@@ -45,8 +45,8 @@ describe('debug', () => {
     }
     const first = sessions.find((s) => s.myTurn)!
     console.log('first seat', first.seat)
-    // a turn-ending take (useKey would keep the turn on the same seat)
-    first.submit(first.myMoves().find((m) => m.type !== 'useKey')!)
+    // any move exercises the wire path; the draw is always first
+    first.submit(first.myMoves()[0]!)
     mesh.flush()
     console.log('deliveries:', seen.join(' | '))
     console.log('hashes', sessions.map((s) => publicHash(s.state)))

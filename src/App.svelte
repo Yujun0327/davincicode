@@ -10,7 +10,7 @@
   let hash = $state(location.hash)
   let hotseat = $state<HotseatSession | null>(null)
   let online = $state<OnlineSession | null>(null)
-  let hotseatConfig: { playerCount: 2 | 3 | 4; names: string[] } | null = null
+  let hotseatConfig: { playerCount: 2 | 3 | 4; names: string[]; jokers: boolean } | null = null
 
   function roomFromHash(): string | null {
     const m = location.hash.match(/room=([A-Za-z0-9]{4,})/)
@@ -49,13 +49,13 @@
   // dev-only: auto-seat a 3P hotseat game for visual QA / screenshots
   $effect(() => {
     if (import.meta.env.DEV && hash === '#demo' && !hotseat) {
-      startHotseat(3, ['Ana', 'Bo', 'Cy'])
+      startHotseat(3, ['Ana', 'Bo', 'Cy'], true)
     }
   })
 
-  function startHotseat(playerCount: 2 | 3 | 4, names: string[]) {
-    hotseatConfig = { playerCount, names }
-    hotseat = new HotseatSession(playerCount, names)
+  function startHotseat(playerCount: 2 | 3 | 4, names: string[], jokers: boolean) {
+    hotseatConfig = { playerCount, names, jokers }
+    hotseat = new HotseatSession(playerCount, names, jokers)
   }
 
   function createRoom() {
@@ -79,7 +79,7 @@
 
   function rematch() {
     if (hotseat && hotseatConfig) {
-      hotseat = new HotseatSession(hotseatConfig.playerCount, hotseatConfig.names)
+      hotseat = new HotseatSession(hotseatConfig.playerCount, hotseatConfig.names, hotseatConfig.jokers)
     } else if (online) {
       online.requestRematch()
     }

@@ -1,18 +1,17 @@
 <script lang="ts">
-  import type { Seat } from '../engine'
+  import type { Seat, TileColor, TileValue } from '../engine'
   import { OnlineSession } from '../app/session.svelte'
   import type { BaseSession } from '../app/session.svelte'
-  import { scores } from '../app/session.svelte'
   import { isMuted, play, setMuted } from './audio'
-  import { NO_SELECTION, targetCells } from './interact'
+  import { claimMove, fileGaps, NO_SELECTION, revealChoices, targetTiles } from './interact'
   import type { Selection } from './interact'
-  import CardSheet from './CardSheet.svelte'
-  import CoinIcon from './CoinIcon.svelte'
-  import KeyIcon from './KeyIcon.svelte'
-  import MarketBoard from './MarketBoard.svelte'
-  import MyGrid from './MyGrid.svelte'
-  import OpponentStrip from './OpponentStrip.svelte'
+  import DrawPool from './DrawPool.svelte'
+  import GuessPicker from './GuessPicker.svelte'
+  import MyRack from './MyRack.svelte'
+  import OpponentRow from './OpponentRow.svelte'
+  import PeekShield from './PeekShield.svelte'
   import RulesLeaflet from './RulesLeaflet.svelte'
+  import Tile from './Tile.svelte'
   import VictoryOverlay from './VictoryOverlay.svelte'
 
   interface Props {
@@ -24,8 +23,6 @@
   const { session, onExit, onRematch }: Props = $props()
 
   let sel = $state<Selection>(NO_SELECTION)
-  let pendingChoice = $state<'a' | 'b' | undefined>(undefined)
-  let pendingDiscard = $state<number | undefined>(undefined)
   let muted = $state(isMuted())
   let rulesOpen = $state(false)
 
@@ -41,18 +38,12 @@
 
   // a selection must not survive losing the turn (remote move landed)
   $effect(() => {
-    if (!session.myTurn && sel.kind !== 'none') clearSelection()
+    if (!session.myTurn && sel.kind !== 'none') sel = NO_SELECTION
   })
 
   function toggleMute() {
     muted = !muted
     setMuted(muted)
-  }
-
-  function clearSelection() {
-    sel = NO_SELECTION
-    pendingChoice = undefined
-    pendingDiscard = undefined
   }
 
   /** The seat shown as "mine" at the bottom: fixed online, the actor in hotseat. */
@@ -63,59 +54,84 @@
   })
 
   const online = $derived(session instanceof OnlineSession ? session : null)
-  const myPlayer = $derived(session.state.players[me])
-  const myScore = $derived(scores(session.state)[me])
+  const view = $derived(session.visibleState)
+  const game = $derived(session.state)
 
   const moves = $derived(session.myMoves())
-  const targets = $derived(targetCells(sel, moves))
+  const targets = $derived(targetTiles(moves))
+  const targetsAt = (seat: Seat) => targets.flatMap((t) => (t.target === seat ? [t.index] : []))
+  const flips = $derived(revealChoices(moves))
+  const canDraw = $derived(moves.some((m) => m.type === 'draw'))
+  const canStop = $derived(moves.some((m) => m.type === 'stop'))
+  /** Filing after a correct guess is an explicit choice; a wrong guess forces it. */
+  const forcedFiling = $derived(game.phase === 'insert' && session.myTurn)
+  const mayFile = $derived(game.phase === 'guess' && fileGaps(moves).length > 0)
+  const gaps = $derived(forcedFiling || sel.kind === 'filing' ? fileGaps(moves) : [])
 
-  const turnLine = $derived.by(() => {
-    if (session.state.result) return 'The chronicle is closed'
-    if (session.mode === 'hotseat') return `${session.names[session.actor]} to play`
-    if (online?.spectator) return `Watching — ${session.names[session.actor]} to play`
-    return session.myTurn ? 'Your turn' : `${session.names[session.actor]} to play`
+  // hotseat: shield the incoming player's rack until they claim the device
+  let lastActor = $state<Seat | null>(null)
+  let shieldFor = $state<Seat | null>(null)
+  $effect(() => {
+    if (session.mode !== 'hotseat' || game.result) return
+    if (lastActor !== session.actor) {
+      lastActor = session.actor
+      shieldFor = session.actor
+    }
   })
 
-  function openSheet(slot: number) {
-    sel = { kind: 'sheet', slot }
+  const turnLine = $derived.by(() => {
+    if (game.result) return 'Case closed'
+    if (!session.myTurn) {
+      const who = session.names[session.actor]
+      return online?.spectator ? `Watching — ${who} works` : `${who} is working…`
+    }
+    switch (game.phase) {
+      case 'draw':
+        return 'Draw a tile — black or white'
+      case 'guess':
+        return game.mayStop ? 'Keep guessing, or stop' : 'Point at a tile and name it'
+      case 'insert':
+        return 'Wrong — file it face-up'
+      case 'reveal':
+        return 'Wrong — turn over one of yours'
+    }
+  })
+
+  const guessLine = $derived.by(() => {
+    const g = game.lastGuess
+    if (!g) return null
+    const claim = g.claim === 'joker' ? 'the dash' : `a ${g.claim}`
+    return `${session.names[g.actor]} named ${session.names[g.target]}'s tile ${g.index + 1}: ${claim} — ${g.correct ? 'CORRECT' : 'WRONG'}`
+  })
+
+  function onDraw(color: TileColor) {
+    session.submit({ type: 'draw', color })
   }
 
-  function commitSheet(commit: {
-    mode: 'buy' | 'takeFacedown'
-    slot: number
-    choice?: 'a' | 'b'
-    discardSlot?: number
-  }) {
-    pendingChoice = commit.choice
-    pendingDiscard = commit.discardSlot
-    sel = { kind: 'placing', slot: commit.slot, mode: commit.mode }
+  function onTarget(target: Seat, index: number) {
+    sel = { kind: 'picking', target, index }
   }
 
-  /** Dispatch the move for the confirmed cell, honoring pending decisions. */
-  function placeAt(x: number, y: number) {
-    if (sel.kind !== 'placing') return
-    const mode = sel.mode
-    const slot = sel.slot
-    const candidates = moves.filter(
-      (m) => m.type === mode && m.slot === slot && m.x === x && m.y === y,
-    )
-    const move =
-      candidates.find(
-        (m) =>
-          m.type !== 'buy' ||
-          ((pendingChoice === undefined || m.choice === pendingChoice) &&
-            (pendingDiscard === undefined || m.discardSlot === pendingDiscard)),
-      ) ?? candidates[0]
-    if (!move) return
-    clearSelection()
-    session.submit(move)
+  function onClaim(claim: TileValue) {
+    const move = claimMove(sel, claim, moves)
+    sel = NO_SELECTION
+    if (move) session.submit(move)
+  }
+
+  function onFile(index: number) {
+    sel = NO_SELECTION
+    session.submit({ type: 'insert', index })
+  }
+
+  function onFlip(index: number) {
+    session.submit({ type: 'reveal', index })
   }
 </script>
 
 <div class="screen">
   <header class="topbar">
     <button class="btn btn--quiet small" onclick={onExit}>Leave</button>
-    <h1 class="turnline" class:rubric={session.myTurn && !session.state.result}>{turnLine}</h1>
+    <h1 class="turnline" class:stamped={session.myTurn && !game.result}>{turnLine}</h1>
     <div class="top-actions">
       <button class="btn btn--quiet small" onclick={toggleMute} aria-label={muted ? 'unmute' : 'mute'}>
         {muted ? 'Sound off' : 'Sound on'}
@@ -132,30 +148,65 @@
 
   <div class="opponents">
     {#each others as seat (seat)}
-      <OpponentStrip {session} {seat} />
+      <OpponentRow
+        name={session.names[seat]}
+        row={view.players[seat].row}
+        active={session.actor === seat && !game.result}
+        eliminated={game.players[seat].eliminated}
+        targetable={session.myTurn && sel.kind !== 'filing' ? targetsAt(seat) : []}
+        picked={sel.kind === 'picking' && sel.target === seat ? sel.index : null}
+        onTarget={(index) => onTarget(seat, index)}
+      />
     {/each}
   </div>
 
   <main class="table">
-    <section class="market-area panel">
-      <h2 class="area-title label">The market</h2>
-      <MarketBoard {session} onOpen={openSheet} />
+    <section class="depot panel">
+      <h2 class="area-title label">The pool</h2>
+      <div class="depot-row">
+        <DrawPool pool={view.pool} {canDraw} {onDraw} />
+        {#if view.drawn}
+          <div class="tray" aria-label="tile in hand">
+            <Tile color={view.drawn.color} value={view.drawn.value} />
+            <span class="tray-note label">
+              {session.myTurn ? 'in hand — do not show' : `${session.names[session.actor]} holds a tile`}
+            </span>
+          </div>
+        {/if}
+      </div>
+      {#if guessLine}
+        <p class="guess-line" class:stamped={game.lastGuess?.correct === false}>{guessLine}</p>
+      {/if}
     </section>
 
-    <section class="me-area panel">
-      <h2 class="area-title label">Your kingdom</h2>
-      <MyGrid placed={myPlayer.placed} {targets} onPlace={placeAt} />
-      {#if sel.kind === 'placing'}
-        <div class="placing-bar">
-          <span class="placing-hint">Choose a gold-washed cell.</span>
-          <button class="btn btn--quiet small" onclick={clearSelection}>Put the card back</button>
+    <section class="me panel">
+      <header class="me-head">
+        <h2 class="area-title label">
+          {online?.spectator ? `dossier of ${session.names[me]}` : 'your dossier'}
+        </h2>
+        <span class="label">{game.players[me].row.filter((t) => !t.revealed).length} sealed</span>
+      </header>
+      <MyRack row={view.players[me].row} {gaps} {onFile} flippable={flips} {onFlip} />
+      {#if session.myTurn && !game.result}
+        <div class="action-bar">
+          {#if forcedFiling}
+            <span class="prompt">Choose the marked slot — the tile files face-up.</span>
+          {:else if game.phase === 'reveal'}
+            <span class="prompt">Pick one of your sealed tiles to turn over.</span>
+          {:else if sel.kind === 'filing'}
+            <span class="prompt">Choose a slot — the tile stays sealed.</span>
+            <button class="btn btn--quiet small" onclick={() => (sel = NO_SELECTION)}>Keep guessing</button>
+          {:else if mayFile}
+            <button class="btn btn--gold" onclick={() => (sel = { kind: 'filing' })}>
+              File my tile &amp; stop
+            </button>
+          {:else if canStop}
+            <button class="btn btn--gold" onclick={() => session.submit({ type: 'stop' })}>
+              Stop here
+            </button>
+          {/if}
         </div>
       {/if}
-      <div class="tray">
-        <span class="stat tabular"><CoinIcon size={20} value={myPlayer.gold} /><span class="stat-word label">gold</span></span>
-        <span class="stat tabular"><KeyIcon size={20} /><span class="count">{myPlayer.keys}</span><span class="stat-word label">keys</span></span>
-        <span class="stat score tabular"><span class="gilt count">{myScore}</span><span class="stat-word label">pts</span></span>
-      </div>
     </section>
   </main>
 </div>
@@ -163,8 +214,16 @@
 {#if rulesOpen}
   <RulesLeaflet onClose={() => (rulesOpen = false)} />
 {/if}
-{#if sel.kind === 'sheet'}
-  <CardSheet {session} slot={sel.slot} onClose={clearSelection} onCommit={commitSheet} />
+{#if sel.kind === 'picking'}
+  <GuessPicker
+    targetName={session.names[sel.target]}
+    jokers={session.cfg.jokers}
+    onClaim={onClaim}
+    onClose={() => (sel = NO_SELECTION)}
+  />
+{/if}
+{#if shieldFor !== null && !game.result}
+  <PeekShield name={session.names[shieldFor]} onOpen={() => (shieldFor = null)} />
 {/if}
 <VictoryOverlay {session} {onRematch} {onExit} />
 
@@ -175,7 +234,7 @@
     flex-direction: column;
     gap: var(--sp-3);
     padding: var(--sp-3);
-    max-width: 1100px;
+    max-width: 980px;
     margin: 0 auto;
   }
 
@@ -192,10 +251,7 @@
   }
 
   .turnline {
-    /* the big turn banner: blackletter, well above the 18px floor */
-    font-size: var(--fs-lg);
-    font-weight: 500;
-    letter-spacing: 0.01em;
+    font-size: var(--fs-md);
     flex: 1;
     text-align: center;
     min-width: 0;
@@ -210,9 +266,9 @@
   }
 
   .notice {
-    background: color-mix(in srgb, var(--rubric) 12%, var(--panel));
-    color: var(--rubric);
-    border: 1px solid var(--rubric);
+    background: color-mix(in srgb, var(--stamp) 12%, var(--paper));
+    color: var(--stamp);
+    border: 1px solid var(--stamp);
     border-radius: var(--radius);
     padding: var(--sp-2) var(--sp-4);
     text-align: center;
@@ -220,17 +276,15 @@
   }
 
   .opponents {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: var(--sp-2);
-    flex-wrap: wrap;
-    justify-content: center;
   }
 
   .table {
-    display: grid;
-    gap: var(--sp-4);
-    grid-template-columns: 1fr;
-    align-items: start;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
   }
 
   .table > section {
@@ -243,55 +297,60 @@
 
   .area-title {
     margin: 0;
-    font-family: var(--font-ui);
   }
 
-  .placing-bar {
+  .depot-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--sp-2);
-  }
-
-  .placing-hint {
-    font-style: italic;
-    color: var(--ink-soft);
-    font-size: var(--fs-xs);
+    gap: var(--sp-5);
+    flex-wrap: wrap;
   }
 
   .tray {
     display: flex;
-    gap: var(--sp-4);
     align-items: center;
+    gap: var(--sp-3);
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+    padding: var(--sp-2) var(--sp-3);
+  }
+
+  .tray-note {
+    max-width: 14ch;
+  }
+
+  .guess-line {
+    margin: 0;
+    font-size: var(--fs-xs);
+    color: var(--ink-soft);
     border-top: 1px solid var(--line);
     padding-top: var(--sp-2);
   }
 
-  .stat {
-    display: inline-flex;
+  .guess-line.stamped {
+    color: var(--stamp);
+  }
+
+  .me-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--sp-2);
+  }
+
+  .action-bar {
+    display: flex;
     align-items: center;
-    gap: 4px;
-    font-family: var(--font-ui);
-    font-weight: 700;
-    font-size: var(--fs-md);
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+    border-top: 1px solid var(--line);
+    padding-top: var(--sp-2);
+    min-height: 44px;
   }
 
-  .count {
-    font-size: var(--fs-md);
-  }
-
-  .score {
-    margin-left: auto;
-  }
-
-  .stat-word {
-    font-size: 0.62rem;
-  }
-
-  /* desktop: market left, kingdom right */
-  @media (min-width: 940px) {
-    .table {
-      grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-    }
+  .prompt {
+    font-style: italic;
+    color: var(--ink-soft);
+    font-size: var(--fs-xs);
   }
 </style>

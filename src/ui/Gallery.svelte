@@ -1,90 +1,82 @@
 <script lang="ts">
-  import { cardsOfDeck } from '../data'
-  import { DECKS, SHIELDS } from '../engine'
-  import CardBack from './CardBack.svelte'
-  import CardFace from './CardFace.svelte'
-  import CoinIcon from './CoinIcon.svelte'
-  import KeyIcon from './KeyIcon.svelte'
-  import MessengerPawn from './MessengerPawn.svelte'
-  import MyGrid from './MyGrid.svelte'
-  import ScoreSheet from './ScoreSheet.svelte'
-  import ShieldIcon from './ShieldIcon.svelte'
-  import {
-    finishedBreakdown,
-    finishedPlayer,
-    midGamePlaced,
-    midGameTargets,
-  } from './gallery-fixtures'
+  import { HIDDEN_VALUE, MAX_VALUE } from '../engine'
+  import DrawPool from './DrawPool.svelte'
+  import MyRack from './MyRack.svelte'
+  import OpponentRow from './OpponentRow.svelte'
+  import Tile from './Tile.svelte'
+  import { decodedRack, opponentRack, ownRack } from './gallery-fixtures'
+
+  const pool = [
+    ...Array.from({ length: 7 }, () => ({ color: 'black' as const, value: HIDDEN_VALUE })),
+    ...Array.from({ length: 5 }, () => ({ color: 'white' as const, value: HIDDEN_VALUE })),
+  ]
 </script>
 
-<!-- Dev-only visual QA: every icon, both backs, all 78 entries, grid fixtures. -->
+<!-- Dev-only visual QA: every tile state, racks, pool, dossiers. -->
 <main class="gallery">
   <h1>Component Gallery</h1>
 
   <section class="panel">
-    <h2 class="label">Heraldic shields</h2>
+    <h2 class="label">Tile faces, 0–11 + joker, both colors</h2>
     <div class="row">
-      {#each SHIELDS as s (s)}
-        <div class="swatch">
-          <ShieldIcon type={s} size={44} />
-          <span class="label">{s}</span>
-        </div>
-      {/each}
-    </div>
-  </section>
-
-  <section class="panel">
-    <h2 class="label">Coins, keys, the messenger</h2>
-    <div class="row">
-      <CoinIcon size={44} value={7} />
-      <CoinIcon size={30} value={0} />
-      <CoinIcon size={30} />
-      <KeyIcon size={44} />
-      <KeyIcon size={26} />
-      <MessengerPawn size={40} />
-    </div>
-  </section>
-
-  <section class="panel">
-    <h2 class="label">Card backs</h2>
-    <div class="row">
-      {#each DECKS as deck (deck)}
-        <CardBack {deck} count={36} width={120} />
-        <CardBack {deck} width={90} />
-      {/each}
-    </div>
-  </section>
-
-  {#each DECKS as deck (deck)}
-    <section class="panel">
-      <h2 class="label">{deck} deck — {cardsOfDeck(deck).length} entries</h2>
-      <div class="cards">
-        {#each cardsOfDeck(deck) as card (card.id)}
-          <CardFace def={card} width={160} />
+      {#each ['black', 'white'] as const as color (color)}
+        {#each Array.from({ length: MAX_VALUE + 1 }, (_, v) => v) as v (v)}
+          <Tile {color} value={v} />
         {/each}
-      </div>
-    </section>
-  {/each}
-
-  <section class="panel">
-    <h2 class="label">Kingdom, five turns in</h2>
-    <MyGrid placed={midGamePlaced} />
+        <Tile {color} value="joker" />
+      {/each}
+    </div>
   </section>
 
   <section class="panel">
-    <h2 class="label">Kingdom during placement (legal targets washed gold)</h2>
-    <MyGrid placed={midGamePlaced} targets={midGameTargets} onPlace={() => {}} />
+    <h2 class="label">Tile states: sealed (redacted), decoded, small</h2>
+    <div class="row">
+      <Tile color="black" value={HIDDEN_VALUE} />
+      <Tile color="white" value={HIDDEN_VALUE} />
+      <Tile color="black" value={7} revealed />
+      <Tile color="white" value="joker" revealed />
+      <Tile color="black" value={HIDDEN_VALUE} small />
+      <Tile color="white" value={4} revealed small />
+    </div>
   </section>
 
   <section class="panel">
-    <h2 class="label">Score sheet, finished kingdom</h2>
-    <div class="sheet-well">
-      <ScoreSheet
-        name="Fixture"
-        breakdown={finishedBreakdown}
-        faceDown={finishedPlayer.placed.map((p) => p.faceDown)}
+    <h2 class="label">Your rack — filing gaps open</h2>
+    <MyRack row={ownRack} gaps={[2, 3]} onFile={() => {}} />
+  </section>
+
+  <section class="panel">
+    <h2 class="label">Your rack — pool-empty penalty, sealed tiles flippable</h2>
+    <MyRack row={ownRack} flippable={[0, 1, 4, 5]} onFlip={() => {}} />
+  </section>
+
+  <section class="panel">
+    <h2 class="label">Opponent dossiers: active, targetable, decoded</h2>
+    <div class="dossiers">
+      <OpponentRow
+        name="Vesper"
+        row={opponentRack}
+        active
+        eliminated={false}
+        targetable={[0, 1, 4, 5]}
+        picked={4}
+        onTarget={() => {}}
+      />
+      <OpponentRow
+        name="Kim"
+        row={decodedRack}
+        active={false}
+        eliminated
+        targetable={[]}
+        picked={null}
+        onTarget={() => {}}
       />
     </div>
+  </section>
+
+  <section class="panel">
+    <h2 class="label">The draw pool</h2>
+    <DrawPool {pool} canDraw onDraw={() => {}} />
   </section>
 </main>
 
@@ -112,24 +104,13 @@
   .row {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--sp-4);
+    gap: var(--sp-2);
     align-items: center;
   }
 
-  .swatch {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--sp-1);
-  }
-
-  .cards {
+  .dossiers {
     display: grid;
-    grid-template-columns: repeat(auto-fill, 160px);
-    gap: var(--sp-4);
-  }
-
-  .sheet-well {
-    max-width: 420px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--sp-3);
   }
 </style>

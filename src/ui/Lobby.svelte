@@ -86,6 +86,15 @@
         {/each}
       </ul>
 
+      {#if session.isHost}
+        <label class="jokers">
+          <input type="checkbox" bind:checked={session.jokersWanted} />
+          <span class="label">play with the dash jokers</span>
+        </label>
+      {:else}
+        <p class="hint">The host chooses whether the dash jokers are in play.</p>
+      {/if}
+
       <div class="actions">
         {#if mySeatEntry}
           <button
@@ -194,7 +203,20 @@
   }
 
   .dot.on {
-    background: var(--scholar);
+    background: var(--stamp);
+  }
+
+  .jokers {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    cursor: pointer;
+  }
+
+  .jokers input {
+    accent-color: var(--stamp);
+    width: 16px;
+    height: 16px;
   }
 
   .name {

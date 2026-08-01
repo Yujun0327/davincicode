@@ -3,7 +3,7 @@ import { flushSync, mount, unmount } from 'svelte'
 import { describe, expect, it } from 'vitest'
 import { BaseSession } from '../src/app/session.svelte'
 import { createGame } from '../src/engine'
-import type { GameConfig, Move, Seat } from '../src/engine'
+import type { GameConfig, Move, Seat, TileValue } from '../src/engine'
 import GameScreen from '../src/ui/GameScreen.svelte'
 import Home from '../src/ui/Home.svelte'
 
@@ -47,17 +47,23 @@ function render(component: Parameters<typeof mount>[0], props: Record<string, un
 }
 
 describe('Home', () => {
-  it('renders the title and starts a hotseat game', () => {
-    let started: { count: number; names: string[] } | null = null
+  it('renders the title and starts a hotseat game with the jokers option', () => {
+    let started: { count: number; names: string[]; jokers: boolean } | null = null
     const { target, cleanup } = render(Home, {
-      onHotseat: (count: number, names: string[]) => (started = { count, names }),
+      onHotseat: (count: number, names: string[], jokers: boolean) =>
+        (started = { count, names, jokers }),
     })
     expect(target.textContent).toContain('Davinci Code')
+
+    const jokersBox = target.querySelector('.jokers input') as HTMLInputElement
+    expect(jokersBox.checked).toBe(true)
+    jokersBox.click()
+    flushSync()
 
     const begin = [...target.querySelectorAll('button')].find((b) => b.textContent!.includes('Begin'))!
     begin.click()
     flushSync()
-    expect(started).toMatchObject({ count: 2 })
+    expect(started).toMatchObject({ count: 2, jokers: false })
     cleanup()
   })
 
@@ -84,7 +90,7 @@ describe('Home', () => {
 /* GameScreen: click-through against a deterministic local session     */
 /* ------------------------------------------------------------------ */
 
-/** Hotseat-style session with a FIXED seed so market rows are stable. */
+/** Hotseat-style session with a FIXED seed so racks are stable. */
 class TestSession extends BaseSession {
   readonly mode = 'hotseat'
 
@@ -94,7 +100,8 @@ class TestSession extends BaseSession {
       sharedSeed: seed,
       startingSeat: 0,
       names: ['Ana', 'Bo'],
-      rulesVersion: '2',
+      jokers: true,
+      rulesVersion: '1',
     }
     super(cfg, createGame(cfg))
   }
@@ -124,105 +131,79 @@ const byText = (root: ParentNode, text: string) =>
 function newScreen() {
   const session = new TestSession()
   const r = render(GameScreen, { session, onExit: () => {}, onRematch: () => {} })
+  // hotseat: the first actor claims the device through the peek shield
+  click(byText(r.target, 'open my dossier'))
   return { session, ...r }
 }
 
-/** Open the market sheet for the active row's slot (1-based aria index). */
-function openSlot(target: HTMLElement, session: BaseSession, slot: number) {
-  const deck = session.state.messenger
-  click(target.querySelector(`button[aria-label^="${deck} slot ${slot + 1}:"]`))
+/** Click the picker key for the given claim (number pad or dash). */
+function pickClaim(target: HTMLElement, claim: TileValue) {
+  if (claim === 'joker') {
+    click(target.querySelector('button[aria-label="claim joker"]'))
+  } else {
+    const key = [...target.querySelectorAll('.pad button')].find((b) => b.textContent!.trim() === String(claim))
+    click(key)
+  }
 }
 
-/** In the open sheet: satisfy any printed decisions, then recruit. */
-function recruitThroughSheet(target: HTMLElement) {
-  const choice = target.querySelector('.choice-option')
-  if (choice) click(choice)
-  const discard = target.querySelector('.discard-option')
-  if (discard) click(discard)
-  const recruit = byText(target, 'Recruit') as HTMLButtonElement
-  expect(recruit.disabled).toBe(false)
-  click(recruit)
-}
+describe('GameScreen', () => {
+  it('renders the table: opponent dossier, pool stacks, own rack, shield flow', () => {
+    const session = new TestSession()
+    const { target, cleanup } = render(GameScreen, {
+      session,
+      onExit: () => {},
+      onRematch: () => {},
+    })
 
-/** Tap the origin target cell and accept the inline confirm chip. */
-function placeAtOrigin(target: HTMLElement) {
-  click(target.querySelector('button[aria-label="place at 0, 0"]'))
-  click(byText(target, 'Place here'))
-}
+    // the peek shield covers the first actor's rack until claimed
+    expect(target.textContent).toContain('Pass to Ana')
+    click(byText(target, 'open my dossier'))
 
-describe('GameScreen (M4)', () => {
-  it('renders the full table: both market rows, messenger position, kingdoms', () => {
-    const { session, target, cleanup } = newScreen()
-
-    // both ruled rows, three face-up entries each
-    const castleRow = target.querySelector('[aria-label="castle row"]')!
-    const villageRow = target.querySelector('[aria-label="village row"]')!
-    expect(castleRow).not.toBe(null)
-    expect(villageRow).not.toBe(null)
-    expect(castleRow.querySelectorAll('[aria-label^="castle slot"]').length).toBe(3)
-    expect(villageRow.querySelectorAll('[aria-label^="village slot"]').length).toBe(3)
-
-    // the messenger starts beside the village row (RL-6)
-    expect(session.state.messenger).toBe('village')
-    expect(villageRow.querySelector('.pawn-slot')).not.toBe(null)
-    expect(castleRow.querySelector('.pawn-slot')).toBe(null)
-
-    // my kingdom page and the opponent's compact panel
-    expect(target.querySelector('[aria-label="your kingdom"]')).not.toBe(null)
-    expect(target.textContent).toContain('Bo')
-    expect(target.textContent).toContain('Ana to play')
+    expect(target.querySelector('[aria-label="dossier of Bo"]')).not.toBe(null)
+    expect(target.querySelector('[aria-label="draw pool"]')).not.toBe(null)
+    expect(target.querySelector('[aria-label="your rack"]')).not.toBe(null)
+    expect(target.textContent).toContain('Draw a tile')
     cleanup()
   })
 
-  it('buys a card and places it on a legal kingdom cell', () => {
+  it('walks a correct guess: draw, target, claim, file face-down, turn passes', () => {
     const { session, target, cleanup } = newScreen()
-    const wanted = session.state.rows[session.state.messenger][0]!
 
-    openSlot(target, session, 0)
-    recruitThroughSheet(target)
-    placeAtOrigin(target)
+    click(target.querySelector('button[aria-label^="draw a black"]'))
+    expect(session.state.drawn).not.toBe(null)
+    expect(target.querySelector('[aria-label="tile in hand"]')).not.toBe(null)
 
-    const placed = session.state.players[0].placed
-    expect(placed.length).toBe(1)
-    expect(placed[0]).toMatchObject({ card: wanted, x: 0, y: 0, faceDown: false })
-    expect(session.actor).toBe(1) // the turn passed
+    // target Bo's first tile and (honor system!) claim its true value
+    const truth = session.state.players[1].row[0].value
+    click(target.querySelector(`button[aria-label="guess Bo's tile 1"]`))
+    pickClaim(target, truth)
+    expect(session.state.players[1].row[0].revealed).toBe(true)
+    expect(session.state.mayStop).toBe(true)
+
+    // stop: file the in-hand tile face-down into an offered gap
+    click(byText(target, 'File my tile'))
+    click(target.querySelector('.gap'))
+    expect(session.actor).toBe(1) // turn passed
+    expect(target.textContent).toContain('Pass to Bo') // shield re-arms for hotseat
     cleanup()
   })
 
-  it('takes a card face-down for gold and keys', () => {
+  it('walks a wrong guess: the drawn tile files face-up through the marked gap', () => {
     const { session, target, cleanup } = newScreen()
 
-    openSlot(target, session, 1)
-    click(byText(target, 'Take face-down'))
-    placeAtOrigin(target)
+    click(target.querySelector('button[aria-label^="draw a white"]'))
+    const truth = session.state.players[1].row[0].value
+    const lie = truth === 0 ? 1 : 0
+    click(target.querySelector(`button[aria-label="guess Bo's tile 1"]`))
+    pickClaim(target, lie)
 
-    const p = session.state.players[0]
-    expect(p.placed.length).toBe(1)
-    expect(p.placed[0].faceDown).toBe(true)
-    expect(p.gold).toBe(15 + 6)
-    expect(p.keys).toBe(2 + 2)
-    cleanup()
-  })
-
-  it('spends a key to switch rows or refresh the market', () => {
-    const { session, target, cleanup } = newScreen()
-
-    const move = () => target.querySelector('[aria-label="move the messenger"]') as HTMLButtonElement
-    const redraw = () => target.querySelector('[aria-label="redraw the row"]') as HTMLButtonElement
-
-    // both seals reflect myMoves(): legal on a fresh turn with 2 keys
-    expect(move().disabled).toBe(false)
-    expect(redraw().disabled).toBe(false)
-
-    click(move())
-    expect(session.state.messenger).toBe('castle')
-    expect(session.state.keyUsedThisTurn).toBe(true)
-    expect(session.state.players[0].keys).toBe(1)
-
-    // one key per turn (R3.5): the seals — now beside the castle row — are dead
-    expect(session.myMoves().some((m) => m.type === 'useKey')).toBe(false)
-    expect(move().disabled).toBe(true)
-    expect(redraw().disabled).toBe(true)
+    expect(session.state.phase).toBe('insert')
+    expect(target.textContent).toContain('file it face-up')
+    const before = session.state.players[0].row.length
+    click(target.querySelector('.gap'))
+    expect(session.state.players[0].row.length).toBe(before + 1)
+    expect(session.state.players[0].row.some((t) => t.revealed)).toBe(true)
+    expect(session.actor).toBe(1)
     cleanup()
   })
 })

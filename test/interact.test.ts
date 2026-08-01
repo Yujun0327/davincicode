@@ -1,35 +1,40 @@
 import { describe, expect, it } from 'vitest'
-import { legalMoves } from '../src/engine'
-import { canBuy, cellMove, NO_SELECTION, targetCells } from '../src/ui/interact'
-import type { Selection } from '../src/ui/interact'
-import { newGame } from './helpers'
+import type { Move } from '../src/engine'
+import { claimMove, fileGaps, NO_SELECTION, revealChoices, targetTiles } from '../src/ui/interact'
 
-describe('buy-flow selection', () => {
-  const g = newGame(2)
-  const moves = legalMoves(g, 0)
+const guess = (target: number, index: number, claim: number | 'joker'): Move => ({
+  type: 'guess',
+  target,
+  index,
+  claim,
+})
 
-  it('no selection targets nothing', () => {
-    expect(targetCells(NO_SELECTION, moves)).toEqual([])
-    expect(cellMove(NO_SELECTION, 0, 0, moves)).toBeNull()
+describe('guess-flow interaction helpers', () => {
+  it('collapses the guess moves to unique target tiles', () => {
+    const moves: Move[] = [guess(1, 0, 0), guess(1, 0, 1), guess(1, 2, 0), guess(2, 1, 'joker')]
+    expect(targetTiles(moves)).toEqual([
+      { target: 1, index: 0 },
+      { target: 1, index: 2 },
+      { target: 2, index: 1 },
+    ])
   })
 
-  it('placing a first card targets the origin only', () => {
-    const sel: Selection = { kind: 'placing', slot: 0, mode: 'takeFacedown' }
-    expect(targetCells(sel, moves)).toEqual([{ x: 0, y: 0 }])
-    const move = cellMove(sel, 0, 0, moves)
-    expect(move).toMatchObject({ type: 'takeFacedown', slot: 0, x: 0, y: 0 })
-    expect(cellMove(sel, 1, 0, moves)).toBeNull()
+  it('resolves a picked claim to its dispatchable move, or null', () => {
+    const moves: Move[] = [guess(1, 0, 0), guess(1, 0, 'joker')]
+    const sel = { kind: 'picking', target: 1, index: 0 } as const
+    expect(claimMove(sel, 'joker', moves)).toEqual(guess(1, 0, 'joker'))
+    expect(claimMove(sel, 5, moves)).toBeNull()
+    expect(claimMove(NO_SELECTION, 0, moves)).toBeNull()
   })
 
-  it('canBuy mirrors affordability from the legal-move list', () => {
-    for (let slot = 0; slot < 3; slot++) {
-      expect(canBuy(slot, moves)).toBe(moves.some((m) => m.type === 'buy' && m.slot === slot))
-    }
-    expect(canBuy(0, [])).toBe(false)
-  })
-
-  it('an opened sheet is not yet a placement', () => {
-    const sel: Selection = { kind: 'sheet', slot: 1 }
-    expect(targetCells(sel, moves)).toEqual([])
+  it('lists filing gaps and reveal choices from the move list', () => {
+    const moves: Move[] = [
+      { type: 'insert', index: 2 },
+      { type: 'insert', index: 3 },
+      { type: 'reveal', index: 1 },
+    ]
+    expect(fileGaps(moves)).toEqual([2, 3])
+    expect(revealChoices(moves)).toEqual([1])
+    expect(fileGaps([guess(1, 0, 0)])).toEqual([])
   })
 })

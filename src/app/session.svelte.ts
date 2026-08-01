@@ -1,4 +1,4 @@
-import { applyMove, createGame, legalMoves, publicHash, redact, scoreBreakdown } from '../engine'
+import { applyMove, createGame, legalMoves, publicHash, redact } from '../engine'
 import type { GameConfig, GameState, Move, Seat } from '../engine'
 import { PROTOCOL_VERSION } from '../transport/types'
 import type { LobbySeat, NetMsg, Transport, WireMove } from '../transport/types'
@@ -6,9 +6,9 @@ import { connectRoom } from '../transport/trystero'
 import { clearGame, loadGame, saveGame } from './persist'
 import type { SavedGame } from './persist'
 
-export type SfxEvent = 'key' | 'buy' | 'facedown' | 'coins' | 'win' | 'lose'
+export type SfxEvent = 'draw' | 'reveal' | 'wrong' | 'place' | 'win' | 'lose'
 
-export const RULES_VERSION = '2'
+export const RULES_VERSION = '1'
 
 export abstract class BaseSession {
   cfg = $state<GameConfig>() as GameConfig
@@ -58,14 +58,12 @@ export abstract class BaseSession {
     const after = applyMove(before, actor, move)
     this.state = after
 
-    if (move.type === 'useKey') this.emit('key')
-    if (move.type === 'buy') this.emit('buy')
-    if (move.type === 'takeFacedown') this.emit('facedown')
-    // any gold swing beyond the purchase price gets a coin clink
-    const gold = (s: GameState) => s.players.reduce((n, p) => n + p.gold, 0)
-    if (gold(after) > gold(before)) this.emit('coins')
+    if (move.type === 'draw') this.emit('draw')
+    if (move.type === 'guess') this.emit(after.lastGuess?.correct ? 'reveal' : 'wrong')
+    if (move.type === 'insert') this.emit('place')
+    if (move.type === 'reveal') this.emit('reveal')
     if (!before.result && after.result) {
-      const won = this.mySeat === null || after.result.winners.includes(this.mySeat)
+      const won = this.mySeat === null || after.result.winner === this.mySeat
       this.emit(won ? 'win' : 'lose')
     }
   }
@@ -79,12 +77,13 @@ export abstract class BaseSession {
 export class HotseatSession extends BaseSession {
   readonly mode = 'hotseat'
 
-  constructor(playerCount: 2 | 3 | 4, names: string[]) {
+  constructor(playerCount: 2 | 3 | 4, names: string[], jokers = true) {
     const cfg: GameConfig = {
       playerCount,
       sharedSeed: crypto.getRandomValues(new Uint32Array(1))[0],
       startingSeat: Math.floor(Math.random() * playerCount),
       names: names.map((n, i) => n.trim() || `Player ${i + 1}`),
+      jokers,
       rulesVersion: RULES_VERSION,
     }
     super(cfg, createGame(cfg))
@@ -104,12 +103,9 @@ export class HotseatSession extends BaseSession {
   }
 }
 
-/**
- * Live "if the game ended now" score per seat, for scoreboards: scroll
- * points on the partial grid + keys, with current gold on purses.
- */
+/** Hidden tiles left per seat — the "health bar" shown on the scoreboard. */
 export function scores(state: GameState): number[] {
-  return state.players.map((p) => (p.placed.length ? scoreBreakdown(p).total : p.keys))
+  return state.players.map((p) => p.row.filter((t) => !t.revealed).length)
 }
 
 /* ------------------------------------------------------------------ */
@@ -124,11 +120,18 @@ export type OnlineStatus =
 const MAX_SEATS = 4
 
 function placeholderConfig(): GameConfig {
-  return { playerCount: 2, sharedSeed: 0, startingSeat: 0, names: ['—', '—'], rulesVersion: RULES_VERSION }
+  return {
+    playerCount: 2,
+    sharedSeed: 0,
+    startingSeat: 0,
+    names: ['—', '—'],
+    jokers: true,
+    rulesVersion: RULES_VERSION,
+  }
 }
 
 /**
- * N-player sync via turn-holder sequencing: Castle Combo never has concurrent
+ * N-player sync via turn-holder sequencing: Davinci Code never has concurrent
  * decisions — at any seq exactly one seat may act and every in-sync client
  * agrees which — so the actor self-stamps `seq = log.length + 1` and
  * broadcasts to the mesh. Out-of-order arrivals trigger a resync request;
@@ -147,6 +150,8 @@ export class OnlineSession extends BaseSession {
   seat = $state<Seat | null>(null)
   myName = $state('')
   rematchWanted = $state(false)
+  /** Host-side lobby option: include the two dash jokers in the deal. */
+  jokersWanted = $state(true)
   /** playerKey → currently connected. */
   peersHere = $state<Record<string, boolean>>({})
 
@@ -301,6 +306,7 @@ export class OnlineSession extends BaseSession {
       sharedSeed: crypto.getRandomValues(new Uint32Array(1))[0],
       startingSeat: Math.floor(Math.random() * playerCount),
       names: filled.map((s) => s.name),
+      jokers: this.jokersWanted,
       rulesVersion: RULES_VERSION,
     }
     const seatOf: Record<string, Seat> = {}

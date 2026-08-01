@@ -78,28 +78,28 @@ export function play(sfx: SfxEvent | 'select' | 'error'): void {
       case 'error':
         tone(180, { dur: 0.18, vol: 0.12, type: 'sawtooth', glide: -60 })
         return
-      case 'key':
-        // a key turning: two dry clicks, the second lower
-        clink({ vol: 0.6 })
-        tone(320, { t: 0.09, dur: 0.06, vol: 0.12, type: 'square' })
-        return
-      case 'buy':
-        // parchment slide, then the entry lands with a soft stamp
+      case 'draw':
+        // a slip slides off the pool
         slide()
-        tone(660, { t: 0.14, dur: 0.1, vol: 0.1, type: 'triangle' })
         return
-      case 'facedown':
-        // card flipped over: muffled slide, coins follow via the coins event
-        slide({ t: 0, vol: 0.6 })
+      case 'place':
+        // typewriter clack: dry click and a low thock as the slip files
+        clink({ vol: 0.6 })
+        tone(320, { t: 0.06, dur: 0.05, vol: 0.12, type: 'square' })
         return
-      case 'coins':
-        clink()
-        clink({ t: 0.07, vol: 0.8 })
-        clink({ t: 0.13, vol: 0.6 })
+      case 'reveal':
+        // the stamp comes down: muffled thunk with a papery burst
+        noise({ vol: 0.35, cutoff: 700, dur: 0.08 })
+        tone(140, { t: 0.01, dur: 0.14, vol: 0.16, type: 'sine', glide: -40 })
+        return
+      case 'wrong':
+        // a dud key: flat descending buzz
+        tone(220, { dur: 0.16, vol: 0.11, type: 'sawtooth', glide: -80 })
         return
       case 'win':
-        for (const [i, f] of [523, 659, 784, 1047].entries())
-          tone(f, { t: i * 0.12, dur: 0.25, vol: 0.16 })
+        // the teletype bell
+        for (const [i, f] of [1319, 1319, 1760].entries())
+          tone(f, { t: i * 0.14, dur: 0.3, vol: 0.14, type: 'sine' })
         return
       case 'lose':
         for (const [i, f] of [392, 330, 262].entries())

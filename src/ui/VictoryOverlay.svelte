@@ -3,7 +3,7 @@
   import { OnlineSession } from '../app/session.svelte'
   import type { BaseSession } from '../app/session.svelte'
   import Modal from './Modal.svelte'
-  import ScoreSheet from './ScoreSheet.svelte'
+  import Tile from './Tile.svelte'
   import { dur, settle } from './motion'
 
   interface Props {
@@ -16,59 +16,33 @@
 
   const result = $derived(session.state.result)
   const online = $derived(session instanceof OnlineSession ? session : null)
-
-  let sheetSeat = $state<number | null>(null)
-
-  // open on the winner's sheet once the result lands
-  $effect(() => {
-    if (result && sheetSeat === null) sheetSeat = result.winners[0]
-  })
 </script>
 
 {#if result}
   <Modal>
     <div class="dialog">
-      <h2 class="crown">
-        {#if result.winners.length > 1}
-          A shared triumph
-        {:else}
-          {session.names[result.winners[0]]} prevails
-        {/if}
-      </h2>
+      <span class="label">final report</span>
+      <h2 class="crown">{session.names[result.winner]} cracked the case</h2>
 
-      <ol class="ranking">
-        {#each result.ranking as seat, i (seat)}
-          <li
-            class="rank-line"
-            class:winner={result.winners.includes(seat)}
-            in:fly={{ y: 14, duration: dur(300), delay: dur(180 + i * 140), easing: settle }}
+      <div class="tables">
+        {#each session.state.players as p, seat (seat)}
+          <div
+            class="line"
+            class:winner={seat === result.winner}
+            in:fly={{ y: 14, duration: dur(300), delay: dur(180 + seat * 140), easing: settle }}
           >
-            <span class="place tabular">{i + 1}.</span>
-            <button
-              class="rank-name"
-              class:current={sheetSeat === seat}
-              onclick={() => (sheetSeat = seat)}
-            >
-              {session.names[seat]}
-            </button>
-            <span class="rank-total gilt tabular">{result.breakdown[seat].total}</span>
-          </li>
+            <span class="line-name">{session.names[seat]}</span>
+            <span class="line-rack">
+              {#each p.row as tile, i (i)}
+                <!-- the ledger shows everything: the case is closed -->
+                <Tile color={tile.color} value={tile.value} revealed={tile.revealed} small />
+              {/each}
+            </span>
+          </div>
         {/each}
-      </ol>
+      </div>
 
-      {#if result.winners.length === 1 && result.ranking.length > 1}
-        <p class="hint">Ties in points fall to whoever kept the most unpursed gold.</p>
-      {/if}
-
-      {#if sheetSeat !== null}
-        <div class="sheet-well">
-          <ScoreSheet
-            name={session.names[sheetSeat]}
-            breakdown={result.breakdown[sheetSeat]}
-            faceDown={session.state.players[sheetSeat].placed.map((p) => p.faceDown)}
-          />
-        </div>
-      {/if}
+      <p class="hint">Sealed tiles kept their secrets to the end — shown here for the record.</p>
 
       {#if online?.rematchWanted}
         <p class="hint">Rematch requested — waiting for the host to deal again&hellip;</p>
@@ -87,67 +61,47 @@
     display: flex;
     flex-direction: column;
     gap: var(--sp-4);
-    min-width: min(84vw, 340px);
+    min-width: min(84vw, 360px);
   }
 
   .crown {
-    font-size: var(--fs-xl);
+    font-size: var(--fs-lg);
   }
 
-  .ranking {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+  .tables {
     display: flex;
     flex-direction: column;
-    gap: var(--sp-1);
+    gap: var(--sp-2);
   }
 
-  .rank-line {
+  .line {
     display: flex;
     align-items: center;
-    gap: var(--sp-2);
+    gap: var(--sp-3);
     border-bottom: 1px solid var(--line);
-    padding-bottom: var(--sp-1);
+    padding-bottom: var(--sp-2);
   }
 
-  .rank-line.winner .rank-name {
-    color: var(--rubric);
-    font-weight: 600;
-  }
-
-  .place {
+  .line-name {
     font-family: var(--font-ui);
-    color: var(--ink-soft);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-size: var(--fs-xs);
+    width: 9ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .rank-name {
-    flex: 1;
-    text-align: left;
-    background: none;
-    border: none;
-    padding: 4px 0;
-    font: inherit;
-    color: var(--ink);
-    text-decoration: underline dotted var(--line);
+  .line.winner .line-name {
+    color: var(--stamp);
   }
 
-  .rank-name.current {
-    text-decoration-color: var(--gold-leaf);
-    text-decoration-style: solid;
-  }
-
-  .rank-total {
-    font-family: var(--font-display);
-    font-size: var(--fs-md);
-  }
-
-  .sheet-well {
-    background: var(--parchment-deep);
-    border-radius: var(--radius);
-    padding: var(--sp-3);
-    max-height: 42dvh;
-    overflow-y: auto;
+  .line-rack {
+    display: flex;
+    gap: 3px;
+    flex-wrap: wrap;
   }
 
   .hint {

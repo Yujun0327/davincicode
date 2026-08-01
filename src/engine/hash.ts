@@ -10,10 +10,10 @@ function stableStringify(value: unknown): string {
 }
 
 /**
- * FNV-1a over the canonical serialization of the FULL state. Castle Combo is
- * open information (deck order is seed-derived on every client), so unlike
- * toybattle there is no private projection to strip — every client must
- * agree on every byte. Cheap desync tripwire, not crypto.
+ * FNV-1a over the canonical serialization of the FULL state. Hidden tiles
+ * are display-only privacy (the whole deal is seed-derived on every client
+ * — honor system, see README), so every client must agree on every byte.
+ * Cheap desync tripwire, not crypto.
  */
 export function publicHash(state: GameState): string {
   const str = stableStringify(state)

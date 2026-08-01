@@ -1,11 +1,6 @@
-import { cardById } from '../data'
 import { deepClone } from './clone'
-import { buyRequirements, effectiveCost, resolveEffects } from './effects'
-import { legalCells } from './legality'
-import { draw, refill } from './market'
-import { computeResult } from './scoring'
-import { FACEDOWN_GOLD, FACEDOWN_KEYS, KINGDOM_CARDS, otherDeck, ROW_SLOTS } from './types'
-import type { GameState, Move, Placement, Seat } from './types'
+import { legalInsertIndices, validClaim } from './legality'
+import type { GameState, Move, Seat } from './types'
 
 /**
  * The single pure reducer. Throws on any illegal move; never mutates `prev`.
@@ -20,76 +15,96 @@ export function applyMove(prev: GameState, actor: Seat, move: Move): GameState {
   const player = state.players[actor]
 
   switch (move.type) {
-    case 'useKey': {
-      if (state.keyUsedThisTurn) throw new Error('key already spent this turn')
-      if (player.keys < 1) throw new Error('no key')
-      if (move.action === 'switch') {
-        const other = otherDeck(state.messenger)
-        if (!state.rows[other].some((c) => c !== null)) throw new Error('other row is dead')
-        state.messenger = other
-      } else {
-        const d = state.messenger
-        if (state.decks[d].length + state.discard[d].length === 0) throw new Error('nothing to redraw')
-        // discard the row FIRST, then reveal — the discards may shuffle right back (RL-7)
-        for (let s = 0; s < ROW_SLOTS; s++) {
-          const c = state.rows[d][s]
-          if (c !== null) state.discard[d].push(c)
-          state.rows[d][s] = null
-        }
-        for (let s = 0; s < ROW_SLOTS; s++) state.rows[d][s] = draw(state, d)
-      }
-      player.keys--
-      state.keyUsedThisTurn = true
+    case 'draw': {
+      if (state.phase !== 'draw') throw new Error('not in draw phase')
+      // the pool is face-down but colors are public: the drawer picks a
+      // color and takes that color's topmost tile
+      const at = state.pool.map((t) => t.color).lastIndexOf(move.color)
+      if (at < 0) throw new Error('no tiles of that color left')
+      state.drawn = state.pool.splice(at, 1)[0]
+      state.phase = 'guess'
       return state
     }
 
-    case 'buy':
-    case 'takeFacedown': {
-      const card = state.rows[state.messenger][move.slot]
-      if (card === null || card === undefined) throw new Error('empty slot')
-      if (player.placed.length >= KINGDOM_CARDS) throw new Error('kingdom is full')
-      if (!legalCells(player.placed).some((c) => c.x === move.x && c.y === move.y)) {
-        throw new Error('illegal cell')
-      }
+    case 'guess': {
+      if (state.phase !== 'guess') throw new Error('no guess owed')
+      if (move.target === actor) throw new Error('cannot guess your own rack') // RL-3
+      const target = state.players[move.target]
+      if (!target) throw new Error('no such seat')
+      if (target.eliminated) throw new Error('target is eliminated') // RL-6
+      const tile = target.row[move.index]
+      if (!tile) throw new Error('no such tile')
+      if (tile.revealed) throw new Error('tile already revealed')
+      if (!validClaim(move.claim)) throw new Error('invalid claim')
 
-      const placement: Placement = {
-        card,
-        x: move.x,
-        y: move.y,
-        faceDown: move.type === 'takeFacedown',
-        purseGold: 0,
-      }
+      const correct = tile.value === move.claim
+      state.lastGuess = { actor, target: move.target, index: move.index, claim: move.claim, correct }
 
-      if (move.type === 'buy') {
-        const cost = effectiveCost(player.placed, card)
-        if (cost > player.gold) throw new Error('cannot afford')
-        player.gold -= cost
-        player.placed.push(placement)
-        resolveEffects(state, actor, placement, cardById.get(card)!.onBuy ?? [], move)
+      if (correct) {
+        tile.revealed = true
+        state.mayStop = true
+        checkOutcome(state) // target may fall, actor may win mid-turn (RL-8)
+        return state // phase stays 'guess': continue, or insert/stop via mayStop
+      }
+      if (state.drawn) {
+        state.drawnFaceUp = true
+        state.phase = 'insert'
       } else {
-        player.gold += FACEDOWN_GOLD
-        player.keys += FACEDOWN_KEYS
-        player.placed.push(placement)
+        state.phase = 'reveal' // pool-empty penalty (RL-4)
       }
+      return state
+    }
 
-      refill(state, state.messenger, move.slot)
-      // the messenger icon is public on the market card, so it moves the pawn
-      // even for face-down takes (RL-8); the icon sends it to the other row (RL-12)
-      if (cardById.get(card)!.messenger) {
-        const target = otherDeck(state.messenger)
-        if (state.rows[target].some((c) => c !== null)) state.messenger = target
+    case 'insert': {
+      const voluntary = state.phase === 'guess'
+      if (!voluntary && state.phase !== 'insert') throw new Error('nothing to file')
+      if (!state.drawn) throw new Error('no tile in hand')
+      if (voluntary && (!state.mayStop || state.drawnFaceUp)) throw new Error('may not stop yet')
+      if (!legalInsertIndices(player.row, state.drawn).includes(move.index)) {
+        throw new Error('illegal filing position')
       }
+      player.row.splice(move.index, 0, { ...state.drawn, revealed: !voluntary })
+      state.drawn = null
+      state.drawnFaceUp = false
+      advanceTurn(state)
+      return state
+    }
+
+    case 'stop': {
+      if (state.phase !== 'guess' || !state.mayStop) throw new Error('may not stop')
+      if (state.drawn) throw new Error('file the tile in hand instead')
+      advanceTurn(state)
+      return state
+    }
+
+    case 'reveal': {
+      if (state.phase !== 'reveal') throw new Error('no reveal owed')
+      const tile = player.row[move.index]
+      if (!tile || tile.revealed) throw new Error('not a hidden tile of yours')
+      tile.revealed = true
+      checkOutcome(state) // self-elimination can end the game (RL-8)
       advanceTurn(state)
       return state
     }
   }
 }
 
-function advanceTurn(state: GameState): void {
-  state.keyUsedThisTurn = false
-  state.turn = (state.turn + 1) % state.players.length
-  // equal turns by construction: the game ends exactly when all kingdoms hold 9
-  if (state.players.every((p) => p.placed.length >= KINGDOM_CARDS)) {
-    state.result = computeResult(state)
+/** Eliminate any fully revealed rack; last seat with a hidden tile wins. */
+function checkOutcome(state: GameState): void {
+  for (const p of state.players) {
+    if (!p.eliminated && p.row.every((t) => t.revealed)) p.eliminated = true
   }
+  const alive = state.players.flatMap((p, seat) => (p.eliminated ? [] : [seat]))
+  if (alive.length === 1) state.result = { winner: alive[0] }
+}
+
+function advanceTurn(state: GameState): void {
+  state.drawn = null
+  state.drawnFaceUp = false
+  state.mayStop = false
+  if (state.result) return
+  do {
+    state.turn = (state.turn + 1) % state.players.length
+  } while (state.players[state.turn].eliminated)
+  state.phase = state.pool.length ? 'draw' : 'guess'
 }
