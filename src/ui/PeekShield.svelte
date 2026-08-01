@@ -23,7 +23,8 @@
     z-index: 40;
     display: grid;
     place-items: center;
-    background: color-mix(in srgb, var(--redact) 62%, transparent);
+    /* fully opaque: the incoming player's rack must not read through */
+    background: var(--manila);
     padding: var(--sp-5);
   }
 
