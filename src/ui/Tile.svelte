@@ -67,6 +67,8 @@
     font-size: calc(var(--tile-h) * 0.42);
     font-variant-numeric: tabular-nums;
     line-height: 1;
+    position: relative;
+    z-index: 1; /* the numeral must stay readable under the DECODED strike */
   }
 
   /* the redaction bar: paper-tone on black slips, ink on white ones */
@@ -97,9 +99,9 @@
     display: grid;
     place-items: center;
     font-family: var(--font-display);
-    font-size: calc(var(--tile-h) * 0.62);
+    font-size: calc(var(--tile-h) * 0.72);
     color: var(--stamp);
-    opacity: 0.92;
+    opacity: 0.38;
     transform: rotate(-6deg);
     pointer-events: none;
   }
