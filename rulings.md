@@ -4,83 +4,54 @@ Every rules ambiguity gets pinned here with a decision and a test. If a real-gam
 dispute finds a better answer, change the ruling here first, then the code, then bump
 `rulesVersion`.
 
-## RL-1 — Card catalog is provisional
-`src/data/cards.ts` ships behind `CARDS_PROVISIONAL = true` until every card is
-verified against two independent sources (BGG card-list threads + the circulated
-"Chateau Combo Card Roster"). Shield type names/count and deck sizes are pinned by
-the same transcription. Card data is pure data — swapping it requires no code
-changes, but bump `rulesVersion`. Tests: `data.test.ts` validates schema, id
-stability, deck membership, cost ranges, and that every effect/scoring kind in the
-DSL is exercised by at least one card.
+## RL-1 — Tie-break: black beats white to the left
+Two tiles of equal number are ordered **black to the left of white** — black is
+treated as strictly smaller. Together with the unique numbers per color this makes
+the order over the 24 numbered tiles a strict total order: every numbered tile has
+exactly one legal position in a rack without jokers. Test: `engine.test.ts`
+("RL-1").
 
-## RL-2 — Face-down cards
-A face-down card occupies its cell for adjacency and for "number of cards" style
-conditions that count physical cards in a row/column, but it has **no shields, no
-deck identity, no cost, no effects, and scores 0**. (It is a card back — countable
-as a card, invisible as a character.) Test: E5.
+## RL-2 — Jokers are legal targets
+An opponent's hidden joker may be targeted like any tile, and the claim `'joker'`
+is a legal guess (the number pad offers `–`). Guessing a number against a joker is
+simply wrong; guessing `'joker'` against a numbered tile is simply wrong. Test:
+"RL-2".
 
-## RL-3 — End-game purse filling is automatic and optimal
-The physical rule lets each player distribute leftover gold onto their purse cards.
-With linear per-gold rates the optimal assignment is computable (fill purses in
-descending point-per-gold order), so the engine does it automatically and the score
-sheet displays the assignment. Revisit only if a transcribed card has a nonlinear
-purse. Test: E4.
+## RL-3 — You may not guess your own tiles
+A guess must target an opponent's hidden tile. Targeting your own rack, a revealed
+tile, or an eliminated player's rack is illegal (eliminated racks stay on the table
+per RL-6 but are inert). Test: "RL-3".
 
-## RL-4 — Discount banners and self-counting
-Discounts are cumulative "-1 banners" ("all/Village/Castle cards cost you one gold
-less from now on") that apply only to **future** purchases — a banner never
-discounts its own purchase (per the roster booklet's quick guide). The reduced
-cost floors at 0. A bought card's per-shield **immediate effect**, by contrast,
-evaluates **after** placement, so its own shields count themselves ("including
-this card" on the printed text). Tests: engine discount + effect suites.
+## RL-4 — Continuing after the pool is empty
+A correct guess always offers the continue-or-stop choice, including when the pool
+is empty (there is then no tile to file on stopping — `stop` simply ends the turn).
+An incorrect guess with an empty pool forces the guesser to reveal one of their own
+hidden tiles, of their choice (`reveal` move). Test: "RL-4".
 
-## RL-5 — Deck exhaustion
-When a refill or redraw needs cards and the deck is empty, shuffle that row's
-discard pile (deterministically, via the game's `rngState` stream) to form the new
-deck. If deck and discard are both empty, the slot stays empty (`null`) and cannot
-be taken. Playout tests assert the messenger's row always offers ≥1 takeable card
-with real deck counts.
+## RL-5 — First player is seed-derived
+The starting seat comes deterministically from `sharedSeed` (`cfg.startingSeat`,
+computed at lobby start). No first-player auction, no host advantage. Test: "RL-5".
 
-## RL-6 — Messenger starting row
-The rulebook places the messenger at the **village** row at setup. Encoded in
-`setup.ts`; if transcription proves otherwise, change there and bump `rulesVersion`.
+## RL-6 — Eliminated players
+A player whose tiles are all revealed is eliminated immediately. Their rack stays
+face-up on the table (public deduction information), their seat is skipped in turn
+order, and they may not be targeted. Test: "RL-6".
 
-## RL-7 — Redraw with a short deck
-A key-redraw discards the active row's 3 cards FIRST, then reveals up to 3 from the
-deck (reshuffling the just-grown discard if needed per RL-5). With both deck and
-discard short, fewer than 3 cards may be revealed; remaining slots are `null`.
+## RL-7 — Jokers dealt in the opening hand sit rightmost
+The physical game lets you place an initially dealt joker anywhere. To keep setup
+deterministic and moveless (the whole deal derives from `sharedSeed`), an opening
+joker is auto-placed at the **right end** of the rack (rightmost = highest; two
+jokers keep their dealt order). This is the weakest ruling in the file — the
+placement choice has real strategic value — and is the first candidate for a
+pre-game `arrange` move after 1.0. Test: "RL-7".
 
-## RL-8 — Messenger icon on face-down takes
-The messenger icon is public information on the market card, so it moves the pawn
-even when the card is taken face-down. Test: engine grammar suite.
-
-## RL-9 — Neighbour-scoped effects and printed choices
-Several cards count shields "in the array of a neighbouring opponent" (Barbarian,
-Templar, Spy, Witch, Brigand…). **Ruling: the engine auto-targets the neighbouring
-opponent (seat ±1) with the higher count** — the reward is a pure gain, so taking
-the max is always optimal and no information is hidden; this removes a fiddly
-decision without changing any rational outcome. In 2-player, both sides are the
-same opponent. Printed **either/or** choices (gold-per-shield OR flat keys) and
-**discard-a-row-card** choices ARE real decisions: they ride on the buy move
-itself (`choice: 'a'|'b'`, `discardSlot`) so the reducer stays deterministic and
-log-replayable. Tests: engine effects suite.
-
-## RL-10 — Tiebreak gold
-"Most leftover gold" for the tiebreak means gold **not** placed on purses (purse
-gold has been converted to points). Test: E8.
-
-## RL-11 — Purse capacity (provisional)
-Purses have a printed capacity ("each purse with capacity") whose numeric value no
-consulted source shows legibly. **Provisional: a uniform capacity of 5 gold per
-purse** until verified from the rulebook or clear card scans. Gold enters purses
-mid-game via fill effects (locked, unspendable) and at game end via the RL-3
-top-up. Data-only change when the real values land; bump `rulesVersion`. Tests: E4, E9.
-
-## RL-12 — Messenger icons (provisional assignment)
-Each deck has exactly **19 cards bearing the messenger icon** (BGG-sourced count);
-the icon sends the pawn to the OTHER row when the card is taken (even face-down —
-RL-8). Confirmed from card photos: Fisherman, Astronomer, Chancellor, Locksmith.
-The remaining assignments in `src/data/cards.ts` are provisional and deterministic
-(every other card until the count is met) so game FLOW is faithful while the exact
-mapping awaits verification. This is the roster's biggest open gap. Test:
-`data.test.ts` asserts the 19-per-deck count.
+## RL-8 — Mid-turn elimination and instant victory
+Revealing a target's last hidden tile eliminates them at that moment, mid-turn. If
+that elimination leaves the guesser as the only seat with a hidden tile, the game
+ends immediately — the pending drawn tile is never filed. Self-elimination is also
+possible: a pool-empty wrong guess forces `reveal`, and flipping your own last
+hidden tile eliminates you — the win then goes to the last seat holding a hidden
+tile (checked after every reveal, whoever caused it). A forced face-up filing can
+never self-eliminate (it adds a revealed tile without flipping hidden ones, and a
+live player always has ≥1 hidden tile at turn start). Test: "RL-8" + playout
+invariants.

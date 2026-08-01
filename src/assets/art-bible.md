@@ -1,135 +1,120 @@
-# Castle Combo — Art Bible: "The Illuminated Manuscript"
+# Davinci Code — Art Bible: "The Classified Dossier"
 
-Every visual decision checks against this page. If a screen doesn't look like a page
-from a working scriptorium — parchment, iron-gall ink, gold leaf laid on in patches,
-heraldic marginalia — it isn't done.
+Every visual decision checks against this page. If a screen doesn't look like a
+cold-war case file open on a steel desk — manila folders, typewritten pages,
+redaction bars, one angry rubber stamp — it isn't done.
 
 ## Mood
 
-A 14th-century household book kept by a slightly irreverent scribe: ruled lines,
-rubricated initials, coats of arms in the margins, a messenger drawn walking along
-the text block. Warm, tactile, a little playful. NOT: glossy, neon, gradient-purple,
-glassmorphic, emoji-flavored, "medieval fantasy game UI" (no stone textures, no
-hammered-metal buttons, no torches).
+An intelligence analyst's desk circa 1962: buff folders, carbon-copy sheets,
+punched index tabs, numbers hammered out on a manual typewriter, classified
+material struck through with heavy black bars, and a crimson CLASSIFIED stamp
+that someone pressed a little too hard. Austere, procedural, a little tense.
+NOT: neon "hacker" green-on-black, glitch effects, digital rain, glassmorphism,
+gradient-purple, emoji-flavored, movie-poster grunge.
 
 ## Surfaces
 
 | Token | Value | Use |
 |---|---|---|
-| `--parchment` | `#EFE4C9` | page background |
-| `--panel` | `#F6EDD6` | cards, sheets, modals |
-| `--parchment-deep` | `#E3D5B2` | wells, empty grid cells, insets |
-| `--ink` | `#3B2F1E` | text, line work (iron-gall brown-black) |
-| `--ink-soft` | `rgb(59 47 30 / .62)` | secondary text |
-| `--line` | `rgb(59 47 30 / .26)` | hairlines, ruled lines, cell outlines |
-| `--gold-leaf` | `#C29832` | the ONE accent: highlights, focus states, legal-target wash, scores |
-| `--rubric` | `#9E3B23` | rubricated emphasis: warnings, "your turn", key actions |
+| `--manila` | `#E7D7A9` | page background (the folder) |
+| `--paper` | `#F5EDD8` | typed sheets: panels, cards, modals |
+| `--manila-deep` | `#D8C68F` | wells, empty slots, insets |
+| `--ink` | `#2B2620` | text, line work (typewriter carbon) |
+| `--ink-soft` | `rgb(43 38 32 / .62)` | secondary text |
+| `--line` | `rgb(43 38 32 / .26)` | hairlines, form rules, slot outlines |
+| `--redact` | `#17130E` | redaction-bar black; BLACK tile bodies |
+| `--tile-white` | `#F9F3E2` | WHITE tile bodies (aged paper, never #fff) |
+| `--stamp` | `#A6382E` | the ONE accent: stamp ink crimson — focus, your-turn, legal targets, DECODED stamps |
 
-Parchment always carries the `--grain` turbulence overlay at low opacity. No pure
-white anywhere; no pure black anywhere. Gold leaf is used like real gold leaf —
-small patches that matter (legal cells, the active row's seal, score numerals),
-never large fills.
+Paper always carries the `--grain` turbulence overlay at low opacity. No pure
+white anywhere; no pure black except `--redact`, which is reserved for redaction
+bars and black tile bodies — that near-black IS the game's core signifier.
+Stamp crimson is used like real stamp ink: pressed on in small, meaningful marks
+(stamps, focus rings, the active seat's tab), never large fills.
 
-## The two decks (load-bearing — players know them from the real game)
+## The tiles (load-bearing — the whole game is these 26 slips)
 
-Card frames identify the deck at a glance, desaturated to sit on parchment:
+A tile is a cipher slip: a small index card standing in a rack. Two colors,
+values 0–11 plus the dash joker.
 
-| Deck | frame base | frame hi | frame lo |
-|---|---|---|---|
-| castle (grey) | `#7E8595` | `#99A0AE` | `#636A79` |
-| village (brown) | `#8A6748` | `#A17E5C` | `#6E4F35` |
+| State | Treatment |
+|---|---|
+| black tile, face | `--redact` body, `--tile-white` typewriter numeral, hairline rim |
+| white tile, face | `--tile-white` body, `--ink` typewriter numeral, hairline rim |
+| hidden (opponent view) | color side shows; where the numeral would be, a solid redaction bar (black tiles get a paper-tone bar, white tiles an ink bar) |
+| revealed | tile face up for everyone + DECODED stamp: `--stamp`, stencil face, struck at a −6° angle, slight overprint bleed; body dims to 82% |
+| joker face | an em-dash struck over a small ⌀ watermark — typed, not drawn |
 
-## Heraldic shield colors (the six real types — load-bearing)
-
-The real game's six shield types, in muted manuscript versions matching the
-physical cards' hues; readable at a glance. The Faith plum is a FUNCTIONAL color
-like the rest — the anti-slop "no purple" rule bans decorative purple, not this.
-
-| Shield | base | hi | lo | charge glyph |
-|---|---|---|---|---|
-| noble (blue) | `#5F87A8` | `#7BA0BE` | `#48708E` | crown |
-| faith (plum) | `#7E5A78` | `#987291` | `#64465F` | cross |
-| scholar (green) | `#5C7A4A` | `#749260` | `#465F38` | open book |
-| crafts (orange) | `#B97B3F` | `#CE9459` | `#9A6230` | hammer |
-| peasant (yellow) | `#C9A94E` | `#DBBF6B` | `#A8893B` | wheat sheaf |
-| military (red) | `#A9553F` | `#C06E56` | `#87422F` | sword |
-
-Shields are never color-only: each type pairs with its charge glyph
-(2px ink line) so color-blind players read the shape.
+Tiles are never color-only: black/white is redundantly encoded by the numeral
+ink swapping (paper-on-black vs ink-on-paper), so every state reads in grayscale.
 
 ## Line
 
-Ink line `#3B2F1E`, 1.5–2px, with deliberate wobble (`wobble.ts`, seeded by
-position — stable across renders). Ruled manuscript lines under headings and card
-name baselines. Nothing perfectly straight except type.
+Carbon-ink line `#2B2620`, 1.5–2px. Form rules under headings — straight, thin,
+bureaucratic (this file's lines are ruled with a straightedge, not wobbled; the
+`wobble.ts` helper is retired for this game). Dotted leader lines connect labels
+to values on form-styled panels. Nothing hand-drawn: the desk is typed, stamped,
+and machine-ruled.
 
 ## Type
 
-- **Grenze Gotisch** (variable): display. Blackletter-adjacent but legible; titles,
-  card names, the big turn banner. Used sparingly — never for body text.
-- **EB Garamond**: body text, rules prose, scroll conditions.
-- **Alegreya Sans SC**: small-caps UI labels, buttons, coin/key counts.
-- Numerals: tabular where they align (gold, keys, scores). Score totals may take a
-  gold-leaf fill with ink outline.
-- Rubricated drop caps (rubric red) open the rules leaflet sections.
+- **Saira Stencil One**: display. Stamps, the title marquee, the turn banner,
+  DECODED/ELIMINATED/CASE CLOSED. All-caps always, tracked wide. Never body text.
+- **Courier Prime**: the typewriter voice — body text, rules prose, and every
+  numeral on every tile. Numerals always tabular. Bold for tile faces.
+- **Archivo Narrow**: small UI labels, buttons, form captions — the pre-printed
+  government-form voice, set in caps with letter-spacing.
+- Field labels follow form convention: `SUBJECT:`, `ROOM:`, `PLAYERS:` in
+  Archivo Narrow caps, values typed in Courier Prime.
 
 ## Shape & depth
 
-- One radius: `4px` for sheets and cards (manuscript pages are nearly square-cut).
-- Coins are stamped gold discs (ellipse + ink rim + tiny mint mark), keys are 2px
-  ink glyphs with a gold bow. Both drawn in SVG, no image binaries.
-- Shadows: single soft umbra `0 2px 6px rgb(59 47 30 / .18)`; never glows.
-- Wax-seal buttons for key actions (move messenger / redraw row): rubric-red disc
-  with an embossed ink glyph, pressed state squashes it 1px.
+- One radius: `2px` — index cards are nearly square-cut.
+- Shadows: single soft umbra `0 2px 6px rgb(43 38 32 / .20)`; never glows.
+- Stamped marks (DECODED, seals, the turn chip) get 92% opacity + 0.5px blur on
+  one edge to read as hand-pressed ink, and always sit at a slight angle (−8°…−4°).
+- Paper-clip and punched-hole details are allowed as SVG line work on panels,
+  sparingly (one per screen at most). No image binaries.
 
-## The market ("the two rows")
+## The table
 
-Two ruled text-blocks: castle row above, village row below, each 3 cards. The
-messenger is a small ink marginalia figure who stands in the margin beside the
-active row. The inactive row sits at ~60% ink opacity (never blurred). Deck stacks
-show folio-numbered card backs; discard is a closed book glyph with a count.
-
-## Cards ("entries")
-
-Each card is a manuscript entry: deck-colored frame rule, name in Grenze Gotisch on
-a ruled baseline, cost as a gold coin in the top-left corner, shields as marginal
-coats of arms down the left edge, messenger icon as the walking figure in the
-bottom margin, immediate effect as an inline illuminated line, scroll scoring on an
-unrolled scroll band at the foot. Purse cards carry a drawn drawstring purse whose
-mouth holds end-game coins. Face-down cards show the deck's back: a diapered
-pattern with the folio number.
-
-## The grid ("your kingdom page")
-
-A 3×3 ruled window on your own page. Empty legal cells wash `--parchment-deep`
-with a faint compass-dot center; legal placement targets take a gold-leaf wash
-(`--gold-leaf` at ~18%) + 2px gold ink outline — never a glow. The window slides
-as your bounding box grows; cells outside the reachable window simply aren't drawn.
+- Your rack sits at the bottom of the desk: full faces visible, standing slips.
+- Opponents' racks fan along the top edge as folder tabs, redacted slips showing
+  color only; the active target slip lifts 2px on hover/focus.
+- The draw pool is a face-down stack of slips banded with a paper strap showing
+  the count, typed: `REMAINING: 07`.
+- The drawn tile waits in an evidence tray beside your rack, visible only to you,
+  with a typed caption `IN HAND — DO NOT FILE`.
+- Legal guess targets take a `--stamp` 2px outline + 8% crimson wash — never a glow.
+- Legal insertion gaps open as ruled slots with a crimson caret beneath.
 
 ## Motion
 
-- Cards SLIDE from the market to the grid (220ms, `settle` easing) with a paper
-  slide foley; landing stamps a faint ink impression.
-- Coins tick and arc; keys turn (small rotation) when spent; the messenger walks
-  (two-frame bob) when he changes rows.
-- Score numbers count up. Nothing floats or pulses idly.
-- All durations through `dur()`; reduced-motion collapses to 0.
+- The drawn tile SLIDES from the pool to the tray (220ms, settle easing) like a
+  carriage return; filing a tile into the rack shunts neighbors aside in one motion.
+- A reveal FLIPS the tile (rotateY, 260ms) and then strikes the DECODED stamp
+  (60ms scale-in with 1px overshoot) — flip first, stamp second, never together.
+- A wrong guess shakes the guesser's drawn tile once (±3px, 120ms) before the
+  forced face-up filing.
+- Elimination closes the player's tab with a struck-through name. Nothing floats
+  or pulses idly. All durations through `dur()`; reduced-motion collapses to 0.
 
 ## Sound
 
-WebAudio only (audio.ts): paper slides, coin clinks (pitch rises with amount), a
-key click, a quill scratch for scoring, one soft bell for game end. Quiet by
+WebAudio only (audio.ts): typewriter clack for tile placement, a dry stamp thunk
+for reveals, paper slide for draws, a single teletype bell for victory. Quiet by
 default; mute persists.
 
 ## Anti-slop checklist (gate every screen against this)
 
-- [ ] no gradients-as-decoration, no glassmorphism, no purple
+- [ ] no gradients-as-decoration, no glassmorphism, no purple, no "hacker" green
 - [ ] no emoji anywhere in UI
 - [ ] no Inter/system-ui; only the three faces above
-- [ ] one radius scale; no mixed rounding
-- [ ] gold focus ring (`2px solid var(--gold-leaf)` offset 2) on every focusable
-- [ ] empty states designed (ruled empty cells, "awaiting the messenger…" prose), never spinners alone
-- [ ] wobble on every drawn line; no perfectly straight SVG strokes
-- [ ] parchment grain present; no flat #fff panels
+- [ ] one radius scale (2px); no mixed rounding
+- [ ] crimson focus ring (`2px solid var(--stamp)` offset 2) on every focusable
+- [ ] empty states designed (empty rack slots ruled, "awaiting transmission…" typed prose), never spinners alone
+- [ ] paper grain present; no flat #fff panels
 - [ ] every color from the tables above; nothing sampled ad hoc
-- [ ] blackletter display face never set below 18px and never for sentences
+- [ ] stencil display face all-caps only, never below 16px, never for sentences
+- [ ] black/white tile state never encoded by color alone

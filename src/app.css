@@ -1,53 +1,35 @@
 /* ------------------------------------------------------------------ */
-/* Castle Combo — "The Illuminated Manuscript" design tokens           */
-/* Parchment surfaces, iron-gall ink line work, gold leaf laid on in   */
-/* small patches, heraldic marginalia. One radius (4px), one shadow,   */
-/* three faces: Grenze Gotisch / EB Garamond / Alegreya Sans SC.       */
+/* Davinci Code — "The Classified Dossier" design tokens               */
+/* Manila folders, typewritten carbon ink, redaction-bar black, one    */
+/* crimson rubber stamp. One radius (2px), one shadow, three faces:    */
+/* Saira Stencil One / Courier Prime / Archivo Narrow.                 */
+/* See src/assets/art-bible.md.                                        */
 /* ------------------------------------------------------------------ */
 
 :root {
   /* surfaces */
-  --parchment: #efe4c9; /* page background */
-  --panel: #f6edd6; /* cards, sheets, modals */
-  --parchment-deep: #e3d5b2; /* wells, empty grid cells, insets */
-  --ink: #3b2f1e; /* text, line work (iron-gall brown-black) */
-  --ink-soft: rgb(59 47 30 / 0.62); /* secondary text */
-  --line: rgb(59 47 30 / 0.26); /* hairlines, ruled lines, cell outlines */
-  --gold-leaf: #c29832; /* the ONE accent */
-  --rubric: #9e3b23; /* rubricated emphasis */
+  --manila: #e7d7a9; /* page background (the folder) */
+  --paper: #f5edd8; /* typed sheets: panels, cards, modals */
+  --manila-deep: #d8c68f; /* wells, empty slots, insets */
+  --ink: #2b2620; /* text, line work (typewriter carbon) */
+  --ink-soft: rgb(43 38 32 / 0.62); /* secondary text */
+  --line: rgb(43 38 32 / 0.26); /* hairlines, form rules, slot outlines */
+  --redact: #17130e; /* redaction-bar black; BLACK tile bodies */
+  --tile-white: #f9f3e2; /* WHITE tile bodies (aged paper) */
+  --stamp: #a6382e; /* the ONE accent: stamp-ink crimson */
 
-  /* the two deck frame triads */
-  --castle: #7e8595;
-  --castle-hi: #99a0ae;
-  --castle-lo: #636a79;
-  --village: #8a6748;
-  --village-hi: #a17e5c;
-  --village-lo: #6e4f35;
-
-  /* the six heraldic shield triads */
-  --noble: #5f87a8;
-  --noble-hi: #7ba0be;
-  --noble-lo: #48708e;
-  --faith: #7e5a78;
-  --faith-hi: #987291;
-  --faith-lo: #64465f;
-  --scholar: #5c7a4a;
-  --scholar-hi: #749260;
-  --scholar-lo: #465f38;
-  --crafts: #b97b3f;
-  --crafts-hi: #ce9459;
-  --crafts-lo: #9a6230;
-  --peasant: #c9a94e;
-  --peasant-hi: #dbbf6b;
-  --peasant-lo: #a8893b;
-  --military: #a9553f;
-  --military-hi: #c06e56;
-  --military-lo: #87422f;
+  /* legacy aliases — old template components read these until the M4
+     UI rebuild deletes them; do not use in new code */
+  --parchment: var(--manila);
+  --panel: var(--paper);
+  --parchment-deep: var(--manila-deep);
+  --gold-leaf: var(--stamp);
+  --rubric: var(--stamp);
 
   /* type roles */
-  --font-display: 'Grenze Gotisch Variable', 'Times New Roman', serif;
-  --font-body: 'EB Garamond', Georgia, serif;
-  --font-ui: 'Alegreya Sans SC', 'Avenir Next', sans-serif;
+  --font-display: 'Saira Stencil One', 'Arial Black', sans-serif;
+  --font-body: 'Courier Prime', 'Courier New', monospace;
+  --font-ui: 'Archivo Narrow', 'Avenir Next Condensed', sans-serif;
 
   /* modular scale, ratio 1.25, base 16 */
   --fs-xs: 0.8rem;
@@ -67,15 +49,15 @@
   --sp-6: 32px;
   --sp-7: 48px;
 
-  /* shape: manuscript pages are nearly square-cut — ONE radius */
-  --radius: 4px;
+  /* shape: index cards are nearly square-cut — ONE radius */
+  --radius: 2px;
 
   /* elevation: single soft umbra + ink hairline; never glows */
-  --shadow: 0 2px 6px rgb(59 47 30 / 0.18);
+  --shadow: 0 2px 6px rgb(43 38 32 / 0.2);
   --hairline: inset 0 0 0 1px var(--line);
 
-  /* parchment grain: feTurbulence baked to a tiling data-URI */
-  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.36 0 0 0 0 0.30 0 0 0 0 0.19 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
+  /* paper grain: feTurbulence baked to a tiling data-URI */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.27 0 0 0 0 0.24 0 0 0 0 0.20 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
 }
 
 *,
@@ -122,7 +104,9 @@ h1,
 h2,
 h3 {
   font-family: var(--font-display);
-  font-weight: 500;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   margin: 0;
   color: var(--ink);
 }
@@ -146,17 +130,15 @@ button {
   color: var(--ink-soft);
 }
 
-/* gold-leaf numeral: gold fill with an ink edge, for score totals */
-.gilt {
-  color: var(--gold-leaf);
-  text-shadow:
-    0 0 0.5px var(--ink),
-    0 0.5px 0.5px rgb(59 47 30 / 0.45);
+/* stamped emphasis — crimson ink, slightly pressed */
+.stamped {
+  color: var(--stamp);
 }
 
-/* rubricated emphasis */
+/* legacy emphasis classes (old template components; removed in M4) */
+.gilt,
 .rubric {
-  color: var(--rubric);
+  color: var(--stamp);
 }
 
 /* ------------------------------------------------------------------ */
@@ -197,13 +179,13 @@ button {
 }
 
 .btn--gold {
-  background: var(--gold-leaf);
+  background: var(--stamp);
   border-color: var(--ink);
-  color: var(--ink);
+  color: var(--paper);
 }
 
 .btn--gold:hover {
-  background: color-mix(in srgb, var(--gold-leaf) 82%, var(--panel));
+  background: color-mix(in srgb, var(--stamp) 85%, var(--redact));
   border-color: var(--ink);
 }
 
@@ -218,9 +200,9 @@ button {
   border-color: var(--line);
 }
 
-/* gold focus ring — never the default blue, never removed */
+/* crimson stamp focus ring — never the default blue, never removed */
 :focus-visible {
-  outline: 2px solid var(--gold-leaf);
+  outline: 2px solid var(--stamp);
   outline-offset: 2px;
 }
 

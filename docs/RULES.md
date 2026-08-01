@@ -1,110 +1,77 @@
-# Castle Combo — Rules Specification (ground truth for the engine)
+# Davinci Code — Rules Specification (ground truth for the engine)
 
-Source: official rules (Catch Up Games / Pandasaurus, 2024), cross-checked against
-published rules summaries. Reference captures live in `docs/reference/`.
-Every numbered fact here is encoded as at least one test. Ambiguities are pinned in
-`rulings.md`, never resolved silently in code.
-
-Scope of this implementation: **2–4 player game**. The official solo mode and any
-promo cards are out of scope for v1.
+The deduction game of hidden ascending ciphers, for 2–4 players. This document is
+the implementation spec; ambiguities are decided in `../rulings.md` (RL-n), never
+resolved silently in code, and every numbered fact here is encoded as at least one
+test.
 
 ## 1. Components
 
-- Two decks of character cards: **castle (grey backs, 39)** and **village (brown
-  backs, 39)** — 78 unique cards, transcribed in `src/data/cards.ts` (RL-1).
-- The **messenger** pawn, marking the active row.
-- Gold coins (treated as unlimited supply) and **keys**.
-- Six heraldic **shield** types: noble, faith, scholar, crafts, peasant, military;
-  cards carry 1–2 shields.
-- Each card carries: a gold **cost**, its shields, optionally a **messenger icon**
-  (RL-12), a **"-1" discount banner** (RL-4), a **purse** (RL-11), an **immediate
-  effect**, and/or an end-game **scroll** scoring condition.
+- 24 numbered tiles: values **0–11**, one of each value in **black** and **white**.
+- 2 joker tiles (the "dash" tiles): one black, one white, no number. Included only
+  when the lobby's **jokers** option is on (`cfg.jokers`).
+
+A tile's color is always public (tile backs are colored). A tile's value is hidden
+until revealed.
 
 ## 2. Setup
 
-1. Shuffle each deck; reveal **3 face-up cards per deck** in two rows: castle above,
-   village below.
-2. The messenger starts beside the **village** row (ruling RL-6).
-3. Each player starts with **15 gold** and **2 keys**.
-4. First player = seat 0 (`startingSeat`); play proceeds clockwise (seat order).
+1. All tiles form a face-down, shuffled **pool** (seeded by `cfg.sharedSeed`).
+2. Each player draws their opening rack: **4 tiles** in a 2–3 player game,
+   **3 tiles** in a 4 player game.
+3. Each rack stands hidden from opponents, ordered ascending **left to right from
+   the owner's perspective**:
+   - lower numbers left of higher numbers;
+   - equal numbers: black left of white (RL-1);
+   - opening jokers auto-place rightmost (RL-7).
+4. The starting seat is derived from the seed (RL-5).
 
-All shuffling derives from `cfg.sharedSeed` in a FIXED order (castle deck, then
-village deck) so every peer reconstructs the same game (`engine/setup.ts`).
+## 3. Rack ordering invariant
 
-## 3. Turn structure
+At all times every rack is a legal ascending sequence: for any two numbered tiles
+at positions i < j, tile_i precedes tile_j under the RL-1 order (by value, then
+black before white). Jokers are unordered wildcards: once placed they **never
+move** and impose no constraint on their neighbors.
 
-A turn is, in order:
+## 4. Turn structure
 
-- **R3.1 [Optional, max once] Spend a key**: return 1 key to the supply, then either
-  (a) **move the messenger** to the other row, or (b) **redraw**: discard all 3 cards
-  of the messenger's current row and reveal 3 replacements from that deck.
-- **R3.2 [Mandatory, exactly once] Take a card** from the messenger's row:
-  - **Buy**: pay the card's gold cost, reduced by 1 per applicable "-1" discount
-    banner already in your kingdom (all/castle/village scope; floor 0; a banner
-    never discounts its own purchase — ruling RL-4). Place it face-up in your
-    kingdom (§4), then resolve its immediate effects (§5).
-  - **Take face-down**: instead of paying, take the chosen card face-down —
-    immediately gain **6 gold and 2 keys**. The card is placed face-down in your
-    kingdom; it has no shields, no effects, and scores nothing (ruling RL-2).
-- **R3.3 [Automatic] Refill**: the emptied slot is refilled from that row's deck.
-  If the deck is empty, shuffle its discard pile to form a new deck (ruling RL-5).
-- **R3.4 [Automatic] Messenger icon**: if the taken card bears a messenger icon,
-  move the messenger to the row the icon indicates (applies also to face-down
-  takes — the icon is visible in the market; ruling RL-8).
-- **R3.5** The key spent in R3.1 is limited to one per turn; spending is legal only
-  before the take, and only when you hold ≥1 key.
+On your turn:
 
-## 4. Kingdom placement
+1. **Draw** — if the pool is non-empty, draw one tile and look at it privately.
+   It stays "in hand" (not yet in your rack). If the pool is empty, skip to
+   guessing.
+2. **Guess** — you must guess at least once: point at any one **hidden** tile in
+   an opponent's rack (RL-2, RL-3) and claim its value: a number 0–11 or "joker".
+3. **Resolution**:
+   - **Correct** → the owner flips that tile face-up in place. You choose:
+     - **continue** — guess again (any opponent, any hidden tile), or
+     - **stop** — end your guessing; file your in-hand tile **face-down** into
+       your rack at its legal position. With the pool empty there is nothing to
+       file — stopping just ends your turn (RL-4).
+   - **Wrong** →
+     - with a tile in hand: file it into your rack **face-up** at its legal
+       position; turn ends.
+     - with the pool empty: flip one of your **own** hidden tiles, your choice
+       (RL-4); turn ends.
 
-- **R4.1** Your kingdom is a grid that must always fit inside a **3×3 bounding box**.
-- **R4.2** The first card may be placed anywhere (canonically at origin).
-- **R4.3** Every later card must be **orthogonally adjacent** (no diagonals) to at
-  least one already-placed card, and may not push the bounding box beyond 3×3.
-- **R4.4** Cards are never moved or removed once placed.
-- **R4.5** The game gives every player exactly **9 turns**; a finished kingdom is
-  exactly the full 3×3.
+Filing position is forced by the ordering invariant; when a joker makes multiple
+positions legal (or the filed tile is itself a joker), the filer picks among the
+legal gaps (`legalInsertIndices` in `src/engine/apply.ts`).
 
-## 5. Immediate effects
+## 5. Elimination and victory
 
-Resolved when a card is bought (never for face-down takes), in the order printed:
+- A player with zero hidden tiles is **eliminated** immediately, whenever that
+  occurs (RL-6, RL-8). Their rack stays face-up on the table; their seat is
+  skipped; they cannot be targeted.
+- **Last seat holding at least one hidden tile wins.** This can trigger mid-turn
+  (RL-8), including by self-elimination on a pool-empty forced reveal.
 
-- **R5.1** Flat gains: +N gold, +N keys.
-- **R5.2** Counted gains: +N gold/keys per matching countable (shields, cards,
-  shield types, missing types, empty cells…) currently in your kingdom — the
-  just-placed card counts itself (ruling RL-4 corollary).
-- **R5.3** Neighbour-scoped gains auto-target the better neighbouring opponent
-  (ruling RL-9); all-opponents effects apply to every other seat, floored at 0.
-- **R5.4** Printed decisions (either/or effects; discard-a-row-card effects) are
-  carried on the buy move itself (`choice`, `discardSlot`) — the reducer resolves
-  all effects atomically and deterministically within the `buy` move (RL-9).
-- **R5.5** Purse-filling effects lock supply gold onto purses immediately; pursed
-  gold is unspendable and scores at game end (RL-11).
+## 6. Public information summary
 
-## 6. End of game & scoring
+Public: every tile's color and position, which tiles are revealed (and their
+values), the pool count, whether the current player holds a drawn tile, all
+guesses and their outcomes. Private: values of hidden rack tiles (to everyone but
+the owner) and of the in-hand tile (to everyone but the holder).
 
-- **R6.1** The game ends when every player has placed 9 cards (equal turns by
-  construction).
-- **R6.2** **Purse top-up**: each player's loose gold is placed onto their purse
-  cards with room (capacity RL-11), **automatically in the optimal assignment**
-  (ruling RL-3), joining any gold locked there during play. Gold not on a purse
-  scores nothing.
-- **R6.3** Each face-up card scores its scroll condition; face-down cards score 0.
-- **R6.4** Positional conditions (row/column/center/corner/edge) evaluate on the
-  normalized grid: shift the bounding box to rows/cols 0–2 (`scoring.ts normalize`).
-- **R6.5** +1 point per leftover key.
-- **R6.6** Winner: highest total. Tie: most leftover gold (gold on purses is spent —
-  ruling RL-10: leftover means unplaced gold). Still tied: shared victory.
-
-## 7. Worked scoring examples (each is a test fixture)
-
-Defined in `test/scoring.test.ts` once the DSL lands (M3), ≥8 fixtures:
-
-- **E1** flat + per-shield-in-grid scroll.
-- **E2** row/column positional scoring after normalization (grid grown leftward, so
-  raw x-coords are negative).
-- **E3** adjacency-scoped scroll (per adjacent shield).
-- **E4** purse: greedy optimal allocation across two purses with different rates.
-- **E5** face-down card: occupies a cell, no shields, still blocks/enables adjacency.
-- **E6** discount floor at 0 and self-counting per-shield effect.
-- **E7** keys: leftover keys score 1 each; spent keys don't.
-- **E8** full 9-card golden fixture, hand-summed, plus gold tiebreak case.
+> Implementation note: this build syncs full state to every client and hides
+> values in the UI only (honor system) — see README Known limitations.
